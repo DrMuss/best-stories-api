@@ -1,4 +1,5 @@
 using BestStories.Api.Contracts;
+using BestStories.Api.HackerNews;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace BestStories.Api.Endpoints;
@@ -16,7 +17,27 @@ public static class BestStoriesEndpoint
 
         return endpoints;
     }
-    
-    private static Ok<IReadOnlyList<StoryDto>> GetStories() =>
-        TypedResults.Ok<IReadOnlyList<StoryDto>>([]);
+
+    private static async Task<Ok<IReadOnlyList<StoryDto>>> GetStories(
+        int? n,
+        HackerNewsClient hackerNews,
+        CancellationToken cancellationToken)
+    {
+        var bestStoryIds = await hackerNews.GetBestStoryIdsAsync(cancellationToken);
+        var requestedStoryIds = n is int requestedCount ? bestStoryIds.Take(requestedCount) : bestStoryIds;
+
+        var stories = new List<StoryDto>();
+
+        foreach (var storyId in requestedStoryIds)
+        {
+            var item = await hackerNews.GetItemAsync(storyId, cancellationToken);
+
+            if (item is not null)
+            {
+                stories.Add(item.ToStory());
+            }
+        }
+
+        return TypedResults.Ok<IReadOnlyList<StoryDto>>(stories);
+    }
 }
