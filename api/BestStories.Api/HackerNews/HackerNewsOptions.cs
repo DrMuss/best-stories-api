@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace BestStories.Api.HackerNews;
 
 public sealed class HackerNewsOptions
@@ -8,7 +6,6 @@ public sealed class HackerNewsOptions
 
     // The trailing slash is load-bearing: HttpClient.BaseAddress drops the last segment
     // without it, taking the v0 with it.
-    [Required]
     public string BaseUrl { get; init; } = string.Empty;
 
     // The bound on how stale a score may get, and the upstream call rate, are the same number.
@@ -23,6 +20,5 @@ public sealed class HackerNewsOptions
     public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(2);
 
     // Politeness towards a free, unauthenticated API rather than a throughput figure.
-    [Range(1, 100)]
     public int MaxConcurrentItemFetches { get; init; } = 10;
 }

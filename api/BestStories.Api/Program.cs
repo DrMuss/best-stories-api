@@ -16,14 +16,9 @@ builder.Services.AddHealthChecks()
 
 // Validated as the app starts rather than when the first refresh runs, so a bad setting is a
 // startup failure with a message instead of a background exception nobody is watching for.
+builder.Services.AddSingleton<IValidateOptions<HackerNewsOptions>, HackerNewsOptionsValidator>();
 builder.Services.AddOptions<HackerNewsOptions>()
     .BindConfiguration(HackerNewsOptions.SectionName)
-    .ValidateDataAnnotations()
-    .Validate(
-        options => options.RefreshInterval >= TimeSpan.FromSeconds(1)
-                   && options.RefreshInterval < TimeSpan.FromDays(1),
-        $"{HackerNewsOptions.SectionName}:RefreshInterval must be at least one second and less "
-        + "than a day. Note that a bare number is read as days: \"30\" means 30 days, not 30 seconds.")
     .ValidateOnStart();
 
 builder.Services.AddHttpClient<HackerNewsClient>((services, httpClient) =>

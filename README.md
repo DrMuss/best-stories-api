@@ -83,6 +83,14 @@ dotnet test                                # whole solution
 dotnet test --filter "Category!=Network"   # as CI runs it, excluding live Hacker News
 ```
 
+To run them as CI actually runs them — Linux, Release, and two cores, which is where timing
+assumptions a fast development machine hides tend to surface:
+
+```bash
+docker run --rm --cpus 2 -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
+  bash -c 'dotnet test --configuration Release --filter "Category!=Network"'
+```
+
 ## Coverage, complexity and mutation testing
 
 Tools are pinned in `.config/dotnet-tools.json`:
