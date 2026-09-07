@@ -23,9 +23,8 @@ public static class ApiDocumentation
 
         options.AddOperationTransformer((operation, _, _) =>
         {
-            // n is taken as text so the endpoint can answer every malformed value itself, which
-            // leaves the generated parameter typed as a string. The contract callers have to
-            // meet is a positive integer, and this is what tells them so.
+            // n binds as text, so the generated parameter is a string. The contract a caller
+            // has to meet is a positive integer, and only this says so.
             foreach (var parameter in operation.Parameters?.OfType<OpenApiParameter>() ?? [])
             {
                 if (parameter.Name == "n" && parameter.Schema is OpenApiSchema schema)

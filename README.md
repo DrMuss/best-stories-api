@@ -43,6 +43,29 @@ whatever comes back and hard-codes no number anywhere. An `n` larger than the li
 clamped to what exists and answered `200 OK`, not rejected: the list length is a ceiling
 upstream sets, not a mistake the caller made.
 
+## Cold start
+
+The snapshot is built before the service accepts requests, so startup takes as long as one
+full refresh. Measured on the dev machine against the live Hacker News API (Release build,
+200 stories, timed from launch to the first served response, so .NET startup is included):
+
+| `MaxConcurrentItemFetches` | Cold start |
+|---|---|
+| 5 | 5.9s |
+| **10 (default)** | **3.5-4.1s** |
+| 20 | 3.3s |
+
+Ten is near the knee for a steady-state cap: halving it costs about two seconds, doubling it
+buys about half of one. The default is chosen for politeness towards a free, unauthenticated
+API rather than for throughput, and the figures are from an Apple-silicon dev machine — a CI
+runner will be slower.
+
+Raising the cap for the first refresh only would cut this further: 50 gets to ~1.9s and 100 to
+~1.7s, where .NET's own startup dominates. That option is deliberately not taken — see the
+omissions table in [DESIGN.md](DESIGN.md). It would save around 1.6 seconds once per process
+start, in exchange for a second code path and a burst of connections against a free API at the
+moment we know least about its health.
+
 ## Tests
 
 ```bash

@@ -9,7 +9,7 @@ namespace BestStories.Api.IntegrationTests;
 
 public class BestStoriesEndpointTests
 {
-    // The story the brief prints as its example response, as Hacker News returns it.
+    // The story behind the brief's example response, in the shape Hacker News returns it.
     private const string BriefExampleItem = """
         {
           "by": "ismaildonmez",

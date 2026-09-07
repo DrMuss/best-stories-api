@@ -12,8 +12,9 @@ public sealed class HackerNewsOptions
     public string BaseUrl { get; init; } = string.Empty;
 
     // The bound on how stale a score may get, and the upstream call rate, are the same number.
-    // Written as a TimeSpan so the unit is in the value rather than the property name. The trap
-    // that comes with that: TimeSpan.Parse reads a bare "30" as thirty days, so the bounds below
-    // reject anything a day or longer rather than let it pass as a very stale service.
     public TimeSpan RefreshInterval { get; init; } = TimeSpan.FromMinutes(1);
+
+    // Politeness towards a free, unauthenticated API rather than a throughput figure.
+    [Range(1, 100)]
+    public int MaxConcurrentItemFetches { get; init; } = 10;
 }

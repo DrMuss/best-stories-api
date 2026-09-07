@@ -34,8 +34,7 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    // The document; Scalar renders it. Root redirects so a reviewer landing on
-    // the host sees the API reference rather than a 404.
+    // Root redirects so a reviewer landing on the host meets the API reference, not a 404.
     app.MapOpenApi();
     app.MapScalarApiReference();
     app.MapGet("/", () => Results.Redirect("/scalar")).ExcludeFromDescription();
