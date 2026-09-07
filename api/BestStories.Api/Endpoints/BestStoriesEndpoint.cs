@@ -17,11 +17,9 @@ public static class BestStoriesEndpoint
     }
 
     private static Results<Ok<IReadOnlyList<StoryDto>>, ProblemHttpResult> GetStories(
-        // Taken as text and parsed here so that every way of getting n wrong — missing, zero,
-        // negative, not a number, or too large to be an int — gets the same answer. Left as
-        // int? the framework would answer the unparseable ones itself, with a different body.
-        // [Required] only describes the parameter to OpenAPI — without it the API reference
-        // shows n as optional and sends requests without it. The guard below does the work.
+        // Text rather than int?, so that the unparseable values are answered by the guard below
+        // alongside every other invalid n, instead of by parameter binding with a different body.
+        // [Required] reaches OpenAPI only: without it the API reference treats n as optional.
         [Required] string? n,
         IStorySnapshot snapshot)
     {

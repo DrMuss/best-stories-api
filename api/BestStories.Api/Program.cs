@@ -2,6 +2,7 @@ using BestStories.Api.Contracts;
 using BestStories.Api.Endpoints;
 using BestStories.Api.HackerNews;
 using BestStories.Api.Stories;
+using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,17 +10,25 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi(ApiDocumentation.Describe);
 builder.Services.AddHealthChecks();
 
-// The v0 in the base URL is a version pin on someone else's contract, so it lives in
-// configuration where it is visible and overridable. The trailing slash is load-bearing:
-// HttpClient.BaseAddress drops the last segment without it.
-var hackerNewsBaseUrl = builder.Configuration["HackerNews:BaseUrl"]
-    ?? throw new InvalidOperationException("HackerNews:BaseUrl is not configured.");
+// Validated as the app starts rather than when the first refresh runs, so a bad setting is a
+// startup failure with a message instead of a background exception nobody is watching for.
+builder.Services.AddOptions<HackerNewsOptions>()
+    .BindConfiguration(HackerNewsOptions.SectionName)
+    .ValidateDataAnnotations()
+    .Validate(
+        options => options.RefreshInterval >= TimeSpan.FromSeconds(1)
+                   && options.RefreshInterval < TimeSpan.FromDays(1),
+        $"{HackerNewsOptions.SectionName}:RefreshInterval must be at least one second and less "
+        + "than a day. Note that a bare number is read as days: \"30\" means 30 days, not 30 seconds.")
+    .ValidateOnStart();
 
-builder.Services.AddHttpClient<HackerNewsClient>(
-    httpClient => httpClient.BaseAddress = new Uri(hackerNewsBaseUrl));
+builder.Services.AddHttpClient<HackerNewsClient>((services, httpClient) =>
+    httpClient.BaseAddress = new Uri(services.GetRequiredService<IOptions<HackerNewsOptions>>().Value.BaseUrl));
 
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IStorySnapshot, StorySnapshot>();
-builder.Services.AddHostedService<StoryRefresher>();
+builder.Services.AddSingleton<IStoryRefresher, StoryRefresher>();
+builder.Services.AddHostedService<StoryRefreshService>();
 
 var app = builder.Build();
 
