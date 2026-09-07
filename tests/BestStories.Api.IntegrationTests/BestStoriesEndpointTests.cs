@@ -33,7 +33,7 @@ public class BestStoriesEndpointTests
             .RespondsWithStory(2, score: 1716)
             .RespondsWithStory(3, score: 12);
 
-        var client = api.CreateClient();
+        var client = await api.CreateReadyClientAsync();
         var callsMadeBuildingTheSnapshot = api.Upstream.UpstreamCallCount;
 
         var responses = await Task.WhenAll(
@@ -57,7 +57,9 @@ public class BestStoriesEndpointTests
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream.RespondsWithBestStoryIds();
 
-        var response = await api.CreateClient().GetAsync("/stories?n=10");
+        var client = await api.CreateReadyClientAsync();
+
+        var response = await client.GetAsync("/stories?n=10");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await response.Content.ReadAsStringAsync()).ShouldBe("[]");
@@ -95,7 +97,9 @@ public class BestStoriesEndpointTests
                 }
                 """);
 
-        var stories = await api.CreateClient().GetFromJsonAsync<StoryDto[]>("/stories?n=3");
+        var client = await api.CreateReadyClientAsync();
+
+        var stories = await client.GetFromJsonAsync<StoryDto[]>("/stories?n=3");
 
         stories.ShouldNotBeNull();
         stories.Length.ShouldBe(3);
@@ -122,7 +126,7 @@ public class BestStoriesEndpointTests
             .RespondsWithStory(2, score: 8)
             .RespondsWithStory(3, score: 7);
 
-        api.CreateClient();
+        await api.CreateReadyClientAsync();
 
         api.Upstream.RequestedPaths.ShouldBe(
             ["beststories.json", "item/1.json", "item/2.json", "item/3.json"],
@@ -140,7 +144,9 @@ public class BestStoriesEndpointTests
             .RespondsWithStory(3, score: 12, title: "Fourth")
             .RespondsWithStory(4, score: 417, title: "Second");
 
-        var stories = await api.CreateClient().GetFromJsonAsync<StoryDto[]>("/stories?n=4");
+        var client = await api.CreateReadyClientAsync();
+
+        var stories = await client.GetFromJsonAsync<StoryDto[]>("/stories?n=4");
 
         stories.ShouldNotBeNull();
         stories.Select(story => story.Title).ShouldBe(["First", "Second", "Third", "Fourth"]);
@@ -157,7 +163,9 @@ public class BestStoriesEndpointTests
             .RespondsWithStory(2, score: 1716, title: "Best")
             .RespondsWithStory(3, score: 12, title: "Worst");
 
-        var stories = await api.CreateClient().GetFromJsonAsync<StoryDto[]>("/stories?n=2");
+        var client = await api.CreateReadyClientAsync();
+
+        var stories = await client.GetFromJsonAsync<StoryDto[]>("/stories?n=2");
 
         stories.ShouldNotBeNull();
         stories.Select(story => story.Title).ShouldBe(["Best", "Middle"]);
@@ -173,7 +181,9 @@ public class BestStoriesEndpointTests
             .RespondsWithStory(2, score: 1716)
             .RespondsWithStory(3, score: 12);
 
-        var response = await api.CreateClient().GetAsync("/stories?n=1000");
+        var client = await api.CreateReadyClientAsync();
+
+        var response = await client.GetAsync("/stories?n=1000");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await response.Content.ReadFromJsonAsync<StoryDto[]>())!.Length.ShouldBe(3);
@@ -187,7 +197,9 @@ public class BestStoriesEndpointTests
             .RespondsWithBestStoryIds(21233041)
             .RespondsWithItem(21233041, BriefExampleItem);
 
-        var response = await api.CreateClient().GetAsync("/stories?n=1");
+        var client = await api.CreateReadyClientAsync();
+
+        var response = await client.GetAsync("/stories?n=1");
 
         (await response.Content.ReadAsStringAsync()).ShouldBe(
             """
@@ -205,7 +217,9 @@ public class BestStoriesEndpointTests
                 {"by":"pg","descendants":4,"id":21233041,"score":100,"time":1570887781,"title":"Ask HN: anything?","type":"story"}
                 """);
 
-        var response = await api.CreateClient().GetAsync("/stories?n=1");
+        var client = await api.CreateReadyClientAsync();
+
+        var response = await client.GetAsync("/stories?n=1");
 
         (await response.Content.ReadAsStringAsync()).ShouldNotContain("uri");
     }
@@ -220,7 +234,9 @@ public class BestStoriesEndpointTests
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream.RespondsWithBestStoryIds();
 
-        var response = await api.CreateClient().GetAsync(requestUri);
+        var client = await api.CreateReadyClientAsync();
+
+        var response = await client.GetAsync(requestUri);
 
         await ShouldBeTheInvalidStoryCountProblem(response);
     }
@@ -231,7 +247,9 @@ public class BestStoriesEndpointTests
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream.RespondsWithBestStoryIds();
 
-        var response = await api.CreateClient().GetAsync("/stories?n=99999999999999999999");
+        var client = await api.CreateReadyClientAsync();
+
+        var response = await client.GetAsync("/stories?n=99999999999999999999");
 
         await ShouldBeTheInvalidStoryCountProblem(response);
     }

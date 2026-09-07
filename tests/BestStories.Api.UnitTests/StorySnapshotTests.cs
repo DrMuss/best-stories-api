@@ -7,9 +7,24 @@ namespace BestStories.Api.UnitTests;
 public class StorySnapshotTests
 {
     [Fact]
-    public void Snapshot_IsEmpty_BeforeAnythingIsPublished()
+    public void Snapshot_ReportsItselfNotReady_BeforeAnythingIsPublished()
     {
-        new StorySnapshot().Current.ShouldBeEmpty();
+        var read = new StorySnapshot().Read();
+
+        read.IsReady.ShouldBeFalse();
+        read.Stories.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Snapshot_IsReady_EvenWhenUpstreamOfferedNoStories()
+    {
+        var snapshot = new StorySnapshot();
+
+        snapshot.Replace([]);
+
+        // Having asked and been given nothing is a different answer from not having asked.
+        snapshot.Read().IsReady.ShouldBeTrue();
+        snapshot.Read().Stories.ShouldBeEmpty();
     }
 
     [Fact]
@@ -18,12 +33,12 @@ public class StorySnapshotTests
         var snapshot = new StorySnapshot();
         snapshot.Replace([AStoryTitled("First")]);
 
-        var readerHoldingTheOldSnapshot = snapshot.Current;
+        var readerHoldingTheOldSnapshot = snapshot.Read().Stories;
         snapshot.Replace([AStoryTitled("Second")]);
 
         readerHoldingTheOldSnapshot.Single().Title.ShouldBe("First");
-        snapshot.Current.Single().Title.ShouldBe("Second");
-        snapshot.Current.ShouldNotBeSameAs(readerHoldingTheOldSnapshot);
+        snapshot.Read().Stories.Single().Title.ShouldBe("Second");
+        snapshot.Read().Stories.ShouldNotBeSameAs(readerHoldingTheOldSnapshot);
     }
 
     [Fact]
@@ -35,7 +50,7 @@ public class StorySnapshotTests
         snapshot.Replace(published);
         published[0] = AStoryTitled("Swapped underneath");
 
-        snapshot.Current.Single().Title.ShouldBe("First");
+        snapshot.Read().Stories.Single().Title.ShouldBe("First");
     }
 
     private static StoryDto AStoryTitled(string title) =>

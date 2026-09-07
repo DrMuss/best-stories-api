@@ -4,7 +4,7 @@ namespace BestStories.Api.Stories;
 
 public interface IStorySnapshot
 {
-    IReadOnlyList<StoryDto> Current { get; }
+    SnapshotRead Read();
 
     void Replace(IReadOnlyList<StoryDto> stories);
 }

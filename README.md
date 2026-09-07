@@ -19,7 +19,11 @@ curl 'http://localhost:5128/stories?n=10'   # the ten highest-scoring stories
 
 In Development the root redirects to the Scalar API reference, where the endpoint can be
 exercised from the browser. The OpenAPI document itself is at `/openapi/v1.json`.
-`GET /health` reports liveness.
+
+`GET /health` is liveness — the process is running. `GET /health/ready` is readiness — this
+instance holds a snapshot and can answer. An orchestrator should gate traffic on the second and
+restart on the first, and should not point a liveness probe at the readiness endpoint: a cold
+instance is starting normally, and restarting it only starts the wait again.
 
 ## Assumptions
 
@@ -45,9 +49,15 @@ upstream sets, not a mistake the caller made.
 
 ## Cold start
 
-The snapshot is built before the service accepts requests, so startup takes as long as one
-full refresh. Measured on the dev machine against the live Hacker News API (Release build,
-200 stories, timed from launch to the first served response, so .NET startup is included):
+The service starts serving immediately and builds its first snapshot in the background. Until
+that snapshot exists, `GET /stories` answers **503** with a `Retry-After` header rather than an
+empty array, because "no stories" and "not asked yet" are different answers. `GET /health/ready`
+reports not-ready over the same window; `GET /health` stays healthy throughout, since the
+process is up and a restart would not help.
+
+How long that window lasts is one full refresh. Measured on the dev machine against the live
+Hacker News API (Release build, 200 stories, timed from launch to the first `200` from
+`/stories`, so .NET startup is included):
 
 | `MaxConcurrentItemFetches` | Cold start |
 |---|---|

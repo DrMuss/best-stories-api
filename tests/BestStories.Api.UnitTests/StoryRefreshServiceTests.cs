@@ -17,14 +17,14 @@ public class StoryRefreshServiceTests
     {
         var (service, refresher, clock, snapshot) = ARefreshService();
 
-        await service.StartAsync(CancellationToken.None);
-        snapshot.Current.Single().Title.ShouldBe("Cycle 1");
+        await StartAndWaitForTheFirstCycle(service, refresher);
+        snapshot.Read().Stories.Single().Title.ShouldBe("Cycle 1");
 
         await AdvanceUntilTheNextCycleCompletes(clock, refresher);
-        snapshot.Current.Single().Title.ShouldBe("Cycle 2");
+        snapshot.Read().Stories.Single().Title.ShouldBe("Cycle 2");
 
         await AdvanceUntilTheNextCycleCompletes(clock, refresher);
-        snapshot.Current.Single().Title.ShouldBe("Cycle 3");
+        snapshot.Read().Stories.Single().Title.ShouldBe("Cycle 3");
 
         await service.StopAsync(CancellationToken.None);
     }
@@ -33,7 +33,7 @@ public class StoryRefreshServiceTests
     public async Task RefreshCycles_DoNotOverlap_WhenRefreshIsSlow()
     {
         var (service, refresher, clock, _) = ARefreshService();
-        await service.StartAsync(CancellationToken.None);
+        await StartAndWaitForTheFirstCycle(service, refresher);
 
         refresher.MakeCyclesHang();
         await AdvanceUntilTheNextCycleStarts(clock, refresher);
@@ -54,7 +54,7 @@ public class StoryRefreshServiceTests
     public async Task RefreshLoop_StopsCycling_WhenTheServiceStops()
     {
         var (service, refresher, clock, _) = ARefreshService();
-        await service.StartAsync(CancellationToken.None);
+        await StartAndWaitForTheFirstCycle(service, refresher);
         await service.StopAsync(CancellationToken.None);
 
         clock.Advance(RefreshInterval);
@@ -67,18 +67,28 @@ public class StoryRefreshServiceTests
     public async Task RefreshLoop_KeepsCycling_AfterACycleThrows()
     {
         var (service, refresher, clock, snapshot) = ARefreshService();
-        await service.StartAsync(CancellationToken.None);
+        await StartAndWaitForTheFirstCycle(service, refresher);
 
         refresher.MakeTheNextCycleThrow();
         await AdvanceUntilTheNextCycleStarts(clock, refresher);
 
         // The failed cycle published nothing, and the loop is still running.
-        snapshot.Current.Single().Title.ShouldBe("Cycle 1");
+        snapshot.Read().Stories.Single().Title.ShouldBe("Cycle 1");
 
         await AdvanceUntilTheNextCycleCompletes(clock, refresher);
-        snapshot.Current.Single().Title.ShouldBe("Cycle 3");
+        snapshot.Read().Stories.Single().Title.ShouldBe("Cycle 3");
 
         await service.StopAsync(CancellationToken.None);
+    }
+
+    // The service starts refreshing as it starts, not before it starts, so the first snapshot
+    // arrives a moment after StartAsync returns rather than during it.
+    private static async Task StartAndWaitForTheFirstCycle(
+        StoryRefreshService service,
+        RecordingRefresher refresher)
+    {
+        await service.StartAsync(CancellationToken.None);
+        await WaitUntil(() => refresher.CyclesCompleted >= 1);
     }
 
     // The loop arms the timer again only after a cycle returns, so a single Advance can land in
@@ -98,14 +108,17 @@ public class StoryRefreshServiceTests
         return AdvanceUntil(clock, () => refresher.CyclesStarted >= target);
     }
 
-    private static async Task AdvanceUntil(FakeTimeProvider clock, Func<bool> cycled)
+    private static Task AdvanceUntil(FakeTimeProvider clock, Func<bool> cycled) =>
+        WaitUntil(cycled, () => clock.Advance(RefreshInterval));
+
+    private static async Task WaitUntil(Func<bool> cycled, Action? nudge = null)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
 
         while (!cycled())
         {
             (DateTime.UtcNow < deadline).ShouldBeTrue("Timed out waiting for the refresh loop.");
-            clock.Advance(RefreshInterval);
+            nudge?.Invoke();
             await Task.Delay(10);
         }
     }

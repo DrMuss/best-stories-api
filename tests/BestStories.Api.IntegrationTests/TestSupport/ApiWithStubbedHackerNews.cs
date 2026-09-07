@@ -1,4 +1,5 @@
 using BestStories.Api.HackerNews;
+using BestStories.Api.Stories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -13,6 +14,31 @@ public sealed class ApiWithStubbedHackerNews(Dictionary<string, string?>? settin
     : WebApplicationFactory<Program>
 {
     public HackerNewsStub Upstream { get; } = new();
+
+    // Serving now starts before the first snapshot exists, so a test that wants stories has to
+    // wait for the refresh the host kicked off rather than assume it already happened.
+    public async Task<HttpClient> CreateReadyClientAsync()
+    {
+        var client = CreateClient();
+        await WaitUntilReadyAsync();
+
+        return client;
+    }
+
+    public async Task WaitUntilReadyAsync()
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+
+        while (!Services.GetRequiredService<IStorySnapshot>().Read().IsReady)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("The story snapshot was never built.");
+            }
+
+            await Task.Delay(10);
+        }
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

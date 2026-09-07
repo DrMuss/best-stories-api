@@ -13,7 +13,7 @@ public class StoryRefresherTests
     public async Task Refresh_LimitsConcurrentUpstreamCalls(int cap)
     {
         using var api = AnApiOfferingFiftyStories(maxConcurrentItemFetches: cap);
-        api.CreateClient();
+        await api.CreateReadyClientAsync();
 
         // The startup refresh has finished; hold the next one open to see its shape.
         api.Upstream.HoldItemResponses();
@@ -32,11 +32,11 @@ public class StoryRefresherTests
     public async Task Refresh_StillFetchesEveryStory_WhileBoundedToAFewAtATime()
     {
         using var api = AnApiOfferingFiftyStories(maxConcurrentItemFetches: 3);
-        api.CreateClient();
+        await api.CreateReadyClientAsync();
 
         await api.Services.GetRequiredService<IStoryRefresher>().RefreshAsync(CancellationToken.None);
 
-        api.Services.GetRequiredService<IStorySnapshot>().Current.Count.ShouldBe(50);
+        api.Services.GetRequiredService<IStorySnapshot>().Read().Stories.Count.ShouldBe(50);
     }
 
     private static ApiWithStubbedHackerNews AnApiOfferingFiftyStories(int maxConcurrentItemFetches)

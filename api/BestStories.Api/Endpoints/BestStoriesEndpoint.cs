@@ -17,6 +17,7 @@ public static class BestStoriesEndpoint
     }
 
     private static Results<Ok<IReadOnlyList<StoryDto>>, ProblemHttpResult> GetStories(
+        HttpContext httpContext,
         // Text rather than int?, so that the unparseable values are answered by the guard below
         // alongside every other invalid n, instead of by parameter binding with a different body.
         // [Required] reaches OpenAPI only: without it the API reference treats n as optional.
@@ -31,8 +32,19 @@ public static class BestStoriesEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
+        if (snapshot.Read() is not { IsReady: true, Stories: var stories })
+        {
+            // Seconds away, not minutes: a caller that waits gets an answer rather than a
+            // permanently empty one.
+            httpContext.Response.Headers.RetryAfter = "5";
+
+            return TypedResults.Problem(
+                title: "Stories are not available yet",
+                detail: "The service is still building its first snapshot of the best stories.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
         // A caller asking for more than exists is not an error; the list length is a ceiling.
-        return TypedResults.Ok<IReadOnlyList<StoryDto>>(
-            snapshot.Current.Take(requestedCount).ToArray());
+        return TypedResults.Ok<IReadOnlyList<StoryDto>>(stories.Take(requestedCount).ToArray());
     }
 }

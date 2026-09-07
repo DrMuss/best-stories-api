@@ -4,10 +4,11 @@ namespace BestStories.Api.Stories;
 
 public sealed class StorySnapshot : IStorySnapshot
 {
-    private StoryDto[] stories = [];
+    private StoryDto[]? stories;
 
     // Nobody can observe a half-built list, so the read path needs no lock.
-    public IReadOnlyList<StoryDto> Current => Volatile.Read(ref stories);
+    public SnapshotRead Read() =>
+        Volatile.Read(ref stories) is { } published ? SnapshotRead.Of(published) : SnapshotRead.NotBuiltYet;
 
     // Copied rather than stored, so the caller cannot alter a published snapshot afterwards.
     public void Replace(IReadOnlyList<StoryDto> stories) =>

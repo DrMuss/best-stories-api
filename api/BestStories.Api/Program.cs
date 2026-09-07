@@ -1,5 +1,6 @@
 using BestStories.Api.Contracts;
 using BestStories.Api.Endpoints;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using BestStories.Api.HackerNews;
 using BestStories.Api.OpenApi;
 using BestStories.Api.Stories;
@@ -10,7 +11,8 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi(ApiDocumentation.Describe);
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<StorySnapshotReadiness>("story-snapshot", tags: ["ready"]);
 
 // Validated as the app starts rather than when the first refresh runs, so a bad setting is a
 // startup failure with a message instead of a background exception nobody is watching for.
@@ -58,7 +60,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 app.MapEndpoints();
 
 app.Run();
