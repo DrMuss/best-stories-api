@@ -24,6 +24,34 @@ public class BestStoriesEndpointTests
         """;
 
     [Fact]
+    public async Task ServingRequests_DoesNotCallHackerNews()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream
+            .RespondsWithBestStoryIds(1, 2, 3)
+            .RespondsWithStory(1, score: 84)
+            .RespondsWithStory(2, score: 1716)
+            .RespondsWithStory(3, score: 12);
+
+        var client = api.CreateClient();
+        var callsMadeBuildingTheSnapshot = api.Upstream.UpstreamCallCount;
+
+        var responses = await Task.WhenAll(
+            Enumerable.Range(0, 100).Select(_ => client.GetAsync("/stories?n=3")));
+
+        responses.ShouldAllBe(response => response.StatusCode == HttpStatusCode.OK);
+        // Served from the snapshot, not served empty: zero upstream calls has to mean the
+        // stories came from memory, not that there were none to return.
+        foreach (var response in responses)
+        {
+            (await response.Content.ReadFromJsonAsync<StoryDto[]>())!.Length.ShouldBe(3);
+        }
+
+        callsMadeBuildingTheSnapshot.ShouldBe(4);
+        api.Upstream.UpstreamCallCount.ShouldBe(callsMadeBuildingTheSnapshot);
+    }
+
+    [Fact]
     public async Task GetStories_ReturnsEmptyArray_WhenNoStoriesAvailable()
     {
         using var api = new ApiWithStubbedHackerNews();
@@ -85,7 +113,7 @@ public class BestStoriesEndpointTests
     }
 
     [Fact]
-    public async Task GetStories_FetchesEveryStoryToRankByScore()
+    public async Task BuildingTheSnapshot_FetchesEveryStoryToRankByScore()
     {
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream
@@ -94,7 +122,7 @@ public class BestStoriesEndpointTests
             .RespondsWithStory(2, score: 8)
             .RespondsWithStory(3, score: 7);
 
-        await api.CreateClient().GetFromJsonAsync<StoryDto[]>("/stories?n=1");
+        api.CreateClient();
 
         api.Upstream.RequestedPaths.ShouldBe(
             ["beststories.json", "item/1.json", "item/2.json", "item/3.json"],
@@ -195,7 +223,6 @@ public class BestStoriesEndpointTests
         var response = await api.CreateClient().GetAsync(requestUri);
 
         await ShouldBeTheInvalidStoryCountProblem(response);
-        api.Upstream.UpstreamCallCount.ShouldBe(0);
     }
 
     [Fact]

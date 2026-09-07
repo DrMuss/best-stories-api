@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using BestStories.Api.Contracts;
-using BestStories.Api.HackerNews;
 using BestStories.Api.Stories;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -17,15 +16,14 @@ public static class BestStoriesEndpoint
         return endpoints;
     }
 
-    private static async Task<Results<Ok<IReadOnlyList<StoryDto>>, ProblemHttpResult>> GetStories(
+    private static Results<Ok<IReadOnlyList<StoryDto>>, ProblemHttpResult> GetStories(
         // Taken as text and parsed here so that every way of getting n wrong — missing, zero,
         // negative, not a number, or too large to be an int — gets the same answer. Left as
         // int? the framework would answer the unparseable ones itself, with a different body.
         // [Required] only describes the parameter to OpenAPI — without it the API reference
         // shows n as optional and sends requests without it. The guard below does the work.
         [Required] string? n,
-        HackerNewsClient hackerNews,
-        CancellationToken cancellationToken)
+        IStorySnapshot snapshot)
     {
         if (RequestedStoryCount.Parse(n) is not int requestedCount)
         {
@@ -35,16 +33,8 @@ public static class BestStoriesEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var bestStoryIds = await hackerNews.GetBestStoryIdsAsync(cancellationToken);
-
-        // Every item is fetched, not the first n: the top n by score cannot be identified
-        // without every score.
-        var items = await Task.WhenAll(
-            bestStoryIds.Select(storyId => hackerNews.GetItemAsync(storyId, cancellationToken)));
-
-        var bestStories = StoryRanker.RankBestFirst(items);
-
         // A caller asking for more than exists is not an error; the list length is a ceiling.
-        return TypedResults.Ok<IReadOnlyList<StoryDto>>(bestStories.Take(requestedCount).ToArray());
+        return TypedResults.Ok<IReadOnlyList<StoryDto>>(
+            snapshot.Current.Take(requestedCount).ToArray());
     }
 }

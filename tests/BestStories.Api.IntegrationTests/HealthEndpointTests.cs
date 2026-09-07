@@ -1,16 +1,17 @@
 using System.Net;
+using BestStories.Api.IntegrationTests.TestSupport;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shouldly;
 
 namespace BestStories.Api.IntegrationTests;
 
-public class HealthEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public class HealthEndpointTests
 {
     [Fact]
     public async Task Health_ReportsHealthy()
     {
-        var client = factory.CreateClient();
+        using var api = new ApiWithStubbedHackerNews();
+        var client = api.CreateClient();
 
         var response = await client.GetAsync("/health");
 

@@ -1,6 +1,7 @@
 using BestStories.Api.Contracts;
 using BestStories.Api.Endpoints;
 using BestStories.Api.HackerNews;
+using BestStories.Api.Stories;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +17,9 @@ var hackerNewsBaseUrl = builder.Configuration["HackerNews:BaseUrl"]
 
 builder.Services.AddHttpClient<HackerNewsClient>(
     httpClient => httpClient.BaseAddress = new Uri(hackerNewsBaseUrl));
+
+builder.Services.AddSingleton<IStorySnapshot, StorySnapshot>();
+builder.Services.AddHostedService<StoryRefresher>();
 
 var app = builder.Build();
 

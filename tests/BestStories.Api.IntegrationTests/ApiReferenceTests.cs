@@ -1,18 +1,19 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using BestStories.Api.IntegrationTests.TestSupport;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shouldly;
 
 namespace BestStories.Api.IntegrationTests;
 
-public class ApiReferenceTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public class ApiReferenceTests
 {
     [Fact]
     public async Task Root_RedirectsToApiReference()
     {
-        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var api = new ApiWithStubbedHackerNews();
+        var client = api.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false
         });
@@ -26,7 +27,8 @@ public class ApiReferenceTests(WebApplicationFactory<Program> factory)
     [Fact]
     public async Task OpenApiDocument_IsServed()
     {
-        var client = factory.CreateClient();
+        using var api = new ApiWithStubbedHackerNews();
+        var client = api.CreateClient();
 
         var response = await client.GetAsync("/openapi/v1.json");
 
@@ -39,7 +41,8 @@ public class ApiReferenceTests(WebApplicationFactory<Program> factory)
     [Fact]
     public async Task OpenApiDocument_DescribesNAsARequiredPositiveInteger()
     {
-        var client = factory.CreateClient();
+        using var api = new ApiWithStubbedHackerNews();
+        var client = api.CreateClient();
 
         var document = await client.GetFromJsonAsync<JsonDocument>("/openapi/v1.json");
 
@@ -61,7 +64,8 @@ public class ApiReferenceTests(WebApplicationFactory<Program> factory)
     [Fact]
     public async Task OpenApiDocument_ShowsAnExampleTimeWithOffset()
     {
-        var client = factory.CreateClient();
+        using var api = new ApiWithStubbedHackerNews();
+        var client = api.CreateClient();
 
         var document = await client.GetFromJsonAsync<JsonDocument>("/openapi/v1.json");
 

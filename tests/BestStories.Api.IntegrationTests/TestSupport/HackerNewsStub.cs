@@ -8,7 +8,9 @@ namespace BestStories.Api.IntegrationTests.TestSupport;
 // than an empty body, so a test that forgets to set one up fails loudly.
 public sealed class HackerNewsStub : HttpMessageHandler
 {
-    private readonly Dictionary<string, string> jsonByPath = new(StringComparer.OrdinalIgnoreCase);
+    // An upstream offering no best stories: the baseline a test does not have to state.
+    private readonly Dictionary<string, string> jsonByPath =
+        new(StringComparer.OrdinalIgnoreCase) { ["beststories.json"] = "[]" };
     private readonly List<string> requestedPaths = [];
     private readonly Lock requestedPathsLock = new();
 
