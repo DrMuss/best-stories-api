@@ -31,7 +31,7 @@ Do not break these without changing `DESIGN.md` first.
 - The request path never calls Hacker News. Requests read an immutable snapshot.
 - The snapshot is replaced by reference swap, never mutated in place.
 - Refresh runs in a `PeriodicTimer` loop. Cycles must not overlap.
-- The 500-item fan-out is concurrency-bounded.
+- The item fan-out is concurrency-bounded, however many ids upstream returns.
 - `beststories.json` ordering is undocumented. Always sort by score explicitly.
 - `time` serialises as ISO-8601 with offset (`2019-10-12T13:43:01+00:00`), not `Z`.
 - `url` is absent on Ask HN posts. `descendants` may be absent or null.
