@@ -1,8 +1,9 @@
 using System.Text.Json;
+using BestStories.Api.Contracts;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
-namespace BestStories.Api.Contracts;
+namespace BestStories.Api.OpenApi;
 
 public static class ApiDocumentation
 {

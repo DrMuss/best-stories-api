@@ -12,7 +12,7 @@ public class StoryRefresherTests
     [InlineData(10)]
     public async Task Refresh_LimitsConcurrentUpstreamCalls(int cap)
     {
-        using var api = AnApiOffering(fiftyStories: true, maxConcurrentItemFetches: cap);
+        using var api = AnApiOfferingFiftyStories(maxConcurrentItemFetches: cap);
         api.CreateClient();
 
         // The startup refresh has finished; hold the next one open to see its shape.
@@ -31,7 +31,7 @@ public class StoryRefresherTests
     [Fact]
     public async Task Refresh_StillFetchesEveryStory_WhileBoundedToAFewAtATime()
     {
-        using var api = AnApiOffering(fiftyStories: true, maxConcurrentItemFetches: 3);
+        using var api = AnApiOfferingFiftyStories(maxConcurrentItemFetches: 3);
         api.CreateClient();
 
         await api.Services.GetRequiredService<IStoryRefresher>().RefreshAsync(CancellationToken.None);
@@ -39,14 +39,14 @@ public class StoryRefresherTests
         api.Services.GetRequiredService<IStorySnapshot>().Current.Count.ShouldBe(50);
     }
 
-    private static ApiWithStubbedHackerNews AnApiOffering(bool fiftyStories, int maxConcurrentItemFetches)
+    private static ApiWithStubbedHackerNews AnApiOfferingFiftyStories(int maxConcurrentItemFetches)
     {
         var api = new ApiWithStubbedHackerNews(new Dictionary<string, string?>
         {
             ["HackerNews:MaxConcurrentItemFetches"] = maxConcurrentItemFetches.ToString()
         });
 
-        var storyIds = Enumerable.Range(1, fiftyStories ? 50 : 0).ToArray();
+        var storyIds = Enumerable.Range(1, 50).ToArray();
         api.Upstream.RespondsWithBestStoryIds(storyIds);
 
         foreach (var storyId in storyIds)

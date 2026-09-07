@@ -1,4 +1,6 @@
-namespace BestStories.Api.Contracts;
+using BestStories.Api.Contracts;
+
+namespace BestStories.Api.OpenApi;
 
 public static class StoryExample
 {

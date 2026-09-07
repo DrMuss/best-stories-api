@@ -1,6 +1,7 @@
 using BestStories.Api.Contracts;
 using BestStories.Api.Endpoints;
 using BestStories.Api.HackerNews;
+using BestStories.Api.OpenApi;
 using BestStories.Api.Stories;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;

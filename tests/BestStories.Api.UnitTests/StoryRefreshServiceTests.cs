@@ -1,4 +1,5 @@
 using BestStories.Api.Contracts;
+using BestStories.Api.HackerNews;
 using BestStories.Api.Stories;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;

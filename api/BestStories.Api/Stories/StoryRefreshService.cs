@@ -1,3 +1,4 @@
+using BestStories.Api.HackerNews;
 using Microsoft.Extensions.Options;
 
 namespace BestStories.Api.Stories;

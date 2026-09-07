@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace BestStories.Api.Stories;
+namespace BestStories.Api.HackerNews;
 
 public sealed class HackerNewsOptions
 {
