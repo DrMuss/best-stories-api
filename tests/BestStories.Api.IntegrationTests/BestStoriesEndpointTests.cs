@@ -9,6 +9,20 @@ namespace BestStories.Api.IntegrationTests;
 
 public class BestStoriesEndpointTests
 {
+    // The story the brief prints as its example response, as Hacker News returns it.
+    private const string BriefExampleItem = """
+        {
+          "by": "ismaildonmez",
+          "descendants": 572,
+          "id": 21233041,
+          "score": 1716,
+          "time": 1570887781,
+          "title": "A uBlock Origin update was rejected from the Chrome Web Store",
+          "type": "story",
+          "url": "https://github.com/uBlockOrigin/uBlock-issues/issues/745"
+        }
+        """;
+
     [Fact]
     public async Task GetStories_ReturnsEmptyArray_WhenNoStoriesAvailable()
     {
@@ -27,18 +41,7 @@ public class BestStoriesEndpointTests
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream
             .RespondsWithBestStoryIds(21233041, 21233042, 21233043)
-            .RespondsWithItem(21233041, """
-                {
-                  "by": "ismaildonmez",
-                  "descendants": 572,
-                  "id": 21233041,
-                  "score": 1716,
-                  "time": 1570887781,
-                  "title": "A uBlock Origin update was rejected from the Chrome Web Store",
-                  "type": "story",
-                  "url": "https://github.com/uBlockOrigin/uBlock-issues/issues/745"
-                }
-                """)
+            .RespondsWithItem(21233041, BriefExampleItem)
             .RespondsWithItem(21233042, """
                 {
                   "by": "pg",
@@ -154,18 +157,7 @@ public class BestStoriesEndpointTests
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream
             .RespondsWithBestStoryIds(21233041)
-            .RespondsWithItem(21233041, """
-                {
-                  "by": "ismaildonmez",
-                  "descendants": 572,
-                  "id": 21233041,
-                  "score": 1716,
-                  "time": 1570887781,
-                  "title": "A uBlock Origin update was rejected from the Chrome Web Store",
-                  "type": "story",
-                  "url": "https://github.com/uBlockOrigin/uBlock-issues/issues/745"
-                }
-                """);
+            .RespondsWithItem(21233041, BriefExampleItem);
 
         var response = await api.CreateClient().GetAsync("/stories?n=1");
 
