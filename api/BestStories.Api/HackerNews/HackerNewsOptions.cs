@@ -11,13 +11,14 @@ public sealed class HackerNewsOptions
     // The bound on how stale a score may get, and the upstream call rate, are the same number.
     public TimeSpan RefreshInterval { get; init; } = TimeSpan.FromMinutes(1);
 
-    // How long one attempt at a single upstream call may take before it is abandoned and,
-    // if attempts remain, retried.
     public TimeSpan UpstreamAttemptTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
-    // The wait before retrying a failed call. Jitter is applied on top, so a fleet does not
-    // retry in step and become the second outage.
+    // Jitter is applied on top, so a fleet does not retry in step and become the second outage.
     public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(2);
+
+    // A pure timer means a service nobody is using still calls Hacker News forever. After this
+    // long without a request, cycles are skipped until someone asks again.
+    public TimeSpan IdleTimeout { get; init; } = TimeSpan.FromMinutes(10);
 
     // Politeness towards a free, unauthenticated API rather than a throughput figure.
     public int MaxConcurrentItemFetches { get; init; } = 10;

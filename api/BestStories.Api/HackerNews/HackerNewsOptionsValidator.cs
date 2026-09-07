@@ -6,6 +6,8 @@ public sealed class HackerNewsOptionsValidator : IValidateOptions<HackerNewsOpti
 {
     private static readonly TimeSpan ShortestRefreshInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan LongestRefreshInterval = TimeSpan.FromDays(1);
+    private const int FewestConcurrentItemFetches = 1;
+    private const int MostConcurrentItemFetches = 100;
 
     public ValidateOptionsResult Validate(string? name, HackerNewsOptions options)
     {
@@ -28,9 +30,16 @@ public sealed class HackerNewsOptionsValidator : IValidateOptions<HackerNewsOpti
                 + " read as days: \"30\" means 30 days, not 30 seconds.");
         }
 
-        if (options.MaxConcurrentItemFetches is < 1 or > 100)
+        if (options.MaxConcurrentItemFetches < FewestConcurrentItemFetches
+            || options.MaxConcurrentItemFetches > MostConcurrentItemFetches)
         {
-            failures.Add(Setting("MaxConcurrentItemFetches") + " must be between 1 and 100.");
+            failures.Add(Setting("MaxConcurrentItemFetches")
+                + $" must be between {FewestConcurrentItemFetches} and {MostConcurrentItemFetches}.");
+        }
+
+        if (options.IdleTimeout <= TimeSpan.Zero)
+        {
+            failures.Add(Setting("IdleTimeout") + " must be greater than zero.");
         }
 
         if (options.UpstreamAttemptTimeout <= TimeSpan.Zero)

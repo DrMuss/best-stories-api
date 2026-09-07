@@ -25,6 +25,37 @@ instance holds a snapshot and can answer. An orchestrator should gate traffic on
 restart on the first, and should not point a liveness probe at the readiness endpoint: a cold
 instance is starting normally, and restarting it only starts the wait again.
 
+## Configuration
+
+Everything tunable lives in one section of `appsettings.json`, and every value is validated at
+startup — a bad setting is a startup failure naming the setting, not a surprise at runtime.
+
+| Setting | Default | What it trades |
+|---|---|---|
+| `BaseUrl` | `https://hacker-news.firebaseio.com/v0/` | The `v0` is a version pin on someone else's contract. The trailing slash is load-bearing |
+| `RefreshInterval` | 1 minute | Freshness against upstream load, in direct proportion. Five minutes would be equally defensible and cost a fifth as many calls |
+| `MaxConcurrentItemFetches` | 10 | Cold-start time against politeness to a free API. See the table above |
+| `IdleTimeout` | 10 minutes | How long an unused instance keeps refreshing before it stops asking |
+| `UpstreamAttemptTimeout` | 10 seconds | How long one attempt waits before being abandoned and retried |
+| `RetryDelay` | 2 seconds | The wait before a retry, with jitter applied on top |
+
+Any of them can be overridden per environment in the usual ways, for example
+`HackerNews__RefreshInterval=00:05:00` as an environment variable.
+
+## Idle behaviour
+
+Refreshing is proportional to use, not to elapsed time. If no request has been served for
+`HackerNews:IdleTimeout` (10 minutes by default), refresh cycles are skipped until someone asks
+again — otherwise an instance nobody is using would call Hacker News roughly 200 times a minute
+indefinitely. Health probes deliberately do not count as use; an orchestrator polling every few
+seconds would otherwise keep every idle instance refreshing forever.
+
+The trade-off is on the caller: the first request after a long idle period is answered
+immediately from the snapshot as it was when refreshing stopped, so it can be up to the idle
+period plus one interval out of date. That request restarts refreshing, so the next one is
+fresh. Serving a stale answer at once was preferred to making one unlucky caller wait for a
+fetch, which is the same reasoning as the cold-start 503.
+
 ## Assumptions
 
 **`beststories.json` does not return a fixed number of IDs, and never promised to.** The

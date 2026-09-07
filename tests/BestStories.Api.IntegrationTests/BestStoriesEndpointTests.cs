@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using BestStories.Api.Contracts;
 using BestStories.Api.IntegrationTests.TestSupport;
+using BestStories.Api.Stories;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Mvc;
 using Shouldly;
 
@@ -22,6 +24,21 @@ public class BestStoriesEndpointTests
           "url": "https://github.com/uBlockOrigin/uBlock-issues/issues/745"
         }
         """;
+
+    [Fact]
+    public async Task GetStories_CountsAsUse_SoRefreshingKeepsGoing()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream.RespondsWithBestStoryIds(1).RespondsWithStory(1, score: 9);
+        var client = await api.CreateReadyClientAsync();
+
+        var requests = api.Services.GetRequiredService<IStoryRequests>();
+        var beforeTheRequest = requests.LastRequestedAt;
+
+        await client.GetAsync("/stories?n=1");
+
+        requests.LastRequestedAt.ShouldBeGreaterThan(beforeTheRequest);
+    }
 
     [Fact]
     public async Task ServingRequests_DoesNotCallHackerNews()

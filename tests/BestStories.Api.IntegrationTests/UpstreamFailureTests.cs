@@ -118,7 +118,7 @@ public class UpstreamFailureTests
         using var api = AWarmApi();
         await api.CreateReadyClientAsync();
 
-        // The attempt timeout is one second in tests.
+        // Longer than the attempt timeout the test host configures.
         api.Upstream.DelaysItemResponsesBy(TimeSpan.FromSeconds(2));
         await ARefreshThatFails(api);
 

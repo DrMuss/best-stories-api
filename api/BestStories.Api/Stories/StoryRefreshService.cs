@@ -7,18 +7,25 @@ public sealed class StoryRefreshService(
     IStoryRefresher refresher,
     TimeProvider timeProvider,
     IOptions<HackerNewsOptions> options,
+    IStoryRequests requests,
     ILogger<StoryRefreshService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(options.Value.RefreshInterval, timeProvider);
 
-        // A cycle that outruns the interval delays the next one rather than running alongside
-        // it, and PeriodicTimer remembers at most one missed tick, so it cannot bank a backlog.
-        // A cycle first, then the wait: the snapshot starts being built as the service starts,
-        // rather than one interval after it.
+        // A cycle first, then the wait, so the snapshot starts being built as the service does.
+        // A cycle that outruns the interval delays the next rather than running alongside it,
+        // and PeriodicTimer remembers at most one missed tick, so it cannot bank a backlog.
         do
         {
+            if (NobodyHasAskedRecently())
+            {
+                logger.LogDebug("Skipping the story refresh; nothing has been served recently.");
+
+                continue;
+            }
+
             try
             {
                 await refresher.RefreshAsync(stoppingToken);
@@ -37,4 +44,7 @@ public sealed class StoryRefreshService(
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
+
+    private bool NobodyHasAskedRecently() =>
+        timeProvider.GetUtcNow() - requests.LastRequestedAt > options.Value.IdleTimeout;
 }

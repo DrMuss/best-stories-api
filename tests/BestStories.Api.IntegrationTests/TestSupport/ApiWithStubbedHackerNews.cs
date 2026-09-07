@@ -15,8 +15,8 @@ public sealed class ApiWithStubbedHackerNews(Dictionary<string, string?>? settin
 {
     public HackerNewsStub Upstream { get; } = new();
 
-    // Serving now starts before the first snapshot exists, so a test that wants stories has to
-    // wait for the refresh the host kicked off rather than assume it already happened.
+    // Serving starts before the first snapshot exists, so a test that wants stories waits for
+    // the refresh the host kicked off rather than assuming it already happened.
     public async Task<HttpClient> CreateReadyClientAsync()
     {
         var client = CreateClient();

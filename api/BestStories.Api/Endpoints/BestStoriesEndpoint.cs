@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using BestStories.Api.Contracts;
 using BestStories.Api.Stories;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -7,6 +8,10 @@ namespace BestStories.Api.Endpoints;
 
 public static class BestStoriesEndpoint
 {
+    // Advisory, and deliberately optimistic: a cold start is seconds. Guessing low costs the
+    // caller one cheap retry, guessing high leaves them waiting long after we could answer.
+    private static readonly TimeSpan RetryAfterWhileWarmingUp = TimeSpan.FromSeconds(5);
+
     public static IEndpointRouteBuilder MapEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/stories", GetStories)
@@ -22,7 +27,8 @@ public static class BestStoriesEndpoint
         // alongside every other invalid n, instead of by parameter binding with a different body.
         // [Required] reaches OpenAPI only: without it the API reference treats n as optional.
         [Required] string? n,
-        IStorySnapshot snapshot)
+        IStorySnapshot snapshot,
+        IStoryRequests requests)
     {
         if (RequestedStoryCount.Parse(n) is not int requestedCount)
         {
@@ -32,11 +38,14 @@ public static class BestStoriesEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
+        // Recorded here rather than in middleware: a health probe every few seconds is not
+        // somebody reading stories, and would keep the refresh running forever.
+        requests.Record();
+
         if (snapshot.Read() is not { IsReady: true, Stories: var stories })
         {
-            // Seconds away, not minutes: a caller that waits gets an answer rather than a
-            // permanently empty one.
-            httpContext.Response.Headers.RetryAfter = "5";
+            httpContext.Response.Headers.RetryAfter =
+                ((int)RetryAfterWhileWarmingUp.TotalSeconds).ToString(CultureInfo.InvariantCulture);
 
             return TypedResults.Problem(
                 title: "Stories are not available yet",

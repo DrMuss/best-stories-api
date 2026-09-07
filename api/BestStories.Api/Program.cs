@@ -23,10 +23,9 @@ builder.Services.AddOptions<HackerNewsOptions>()
 
 builder.Services.AddHttpClient<HackerNewsClient>((services, httpClient) =>
         httpClient.BaseAddress = new Uri(services.GetRequiredService<IOptions<HackerNewsOptions>>().Value.BaseUrl))
-    // Retry with backoff and jitter, a circuit breaker, and timeouts, ordered correctly. Retry
-    // is the one resilience pattern that can cause the outage it prevents: three retries across
-    // a whole refresh, against an upstream already struggling, is us adding to the load. The
-    // breaker and the fan-out cap are what make it safe.
+    // Retry is the one resilience pattern that can cause the outage it prevents: three retries
+    // across a whole refresh, against an upstream already struggling, is us adding to the load.
+    // The breaker and the fan-out cap are what make it safe.
     .AddStandardResilienceHandler()
     .Configure((resilience, services) =>
     {
@@ -40,6 +39,7 @@ builder.Services.AddHttpClient<HackerNewsClient>((services, httpClient) =>
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IStorySnapshot, StorySnapshot>();
+builder.Services.AddSingleton<IStoryRequests, StoryRequests>();
 builder.Services.AddSingleton<IStoryRefresher, StoryRefresher>();
 builder.Services.AddHostedService<StoryRefreshService>();
 

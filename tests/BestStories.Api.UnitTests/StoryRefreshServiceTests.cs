@@ -11,6 +11,7 @@ namespace BestStories.Api.UnitTests;
 public class StoryRefreshServiceTests
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(10);
 
     [Fact]
     public async Task RefreshLoop_ReplacesSnapshot_AfterInterval()
@@ -81,6 +82,39 @@ public class StoryRefreshServiceTests
         await service.StopAsync(CancellationToken.None);
     }
 
+    [Fact]
+    public async Task Refresh_IsSkipped_WhenNoRequestInLastTenMinutes()
+    {
+        var (service, refresher, clock, _, _) = ARefreshServiceWithRequests();
+        await StartAndWaitForTheFirstCycle(service, refresher);
+
+        // Nobody asks for stories for longer than the idle timeout.
+        clock.Advance(IdleTimeout + RefreshInterval);
+        clock.Advance(RefreshInterval);
+        clock.Advance(RefreshInterval);
+
+        (await refresher.CyclesStartedStayAt(1)).ShouldBeTrue();
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Refresh_Resumes_OnNextRequest()
+    {
+        var (service, refresher, clock, _, requests) = ARefreshServiceWithRequests();
+        await StartAndWaitForTheFirstCycle(service, refresher);
+
+        clock.Advance(IdleTimeout + RefreshInterval);
+        (await refresher.CyclesStartedStayAt(1)).ShouldBeTrue();
+
+        requests.Record();
+        await AdvanceUntilTheNextCycleCompletes(clock, refresher);
+
+        refresher.CyclesCompleted.ShouldBe(2);
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
     // The service starts refreshing as it starts, not before it starts, so the first snapshot
     // arrives a moment after StartAsync returns rather than during it.
     private static async Task StartAndWaitForTheFirstCycle(
@@ -125,17 +159,29 @@ public class StoryRefreshServiceTests
 
     private static (StoryRefreshService, RecordingRefresher, FakeTimeProvider, IStorySnapshot) ARefreshService()
     {
+        var (service, refresher, clock, snapshot, _) = ARefreshServiceWithRequests();
+
+        return (service, refresher, clock, snapshot);
+    }
+
+    private static (StoryRefreshService, RecordingRefresher, FakeTimeProvider, IStorySnapshot, IStoryRequests)
+        ARefreshServiceWithRequests()
+    {
         var snapshot = new StorySnapshot();
         var refresher = new RecordingRefresher(snapshot);
         var clock = new FakeTimeProvider();
+        var requests = new StoryRequests(clock);
         var options = Options.Create(new HackerNewsOptions
         {
             BaseUrl = "https://hacker-news.test/v0/",
-            RefreshInterval = RefreshInterval
+            RefreshInterval = RefreshInterval,
+            IdleTimeout = IdleTimeout
         });
 
-        return (new StoryRefreshService(refresher, clock, options, NullLogger<StoryRefreshService>.Instance),
-            refresher, clock, snapshot);
+        var service = new StoryRefreshService(
+            refresher, clock, options, requests, NullLogger<StoryRefreshService>.Instance);
+
+        return (service, refresher, clock, snapshot, requests);
     }
 
     // Publishes a snapshot naming the cycle that produced it, so a test can tell one refresh
