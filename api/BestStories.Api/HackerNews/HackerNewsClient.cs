@@ -2,9 +2,6 @@ using System.Net.Http.Json;
 
 namespace BestStories.Api.HackerNews;
 
-/// <summary>
-/// The only code in the service that talks to Hacker News.
-/// </summary>
 public sealed class HackerNewsClient(HttpClient httpClient)
 {
     public async Task<IReadOnlyList<int>> GetBestStoryIdsAsync(CancellationToken cancellationToken) =>

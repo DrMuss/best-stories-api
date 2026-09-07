@@ -34,3 +34,13 @@ Tooling and configuration chosen at setup, and therefore present in the first co
 | Stryker.NET | Coverage proves a line ran; mutation proves the test would fail if the line were wrong. Run locally, score quoted in the README — scheduled nightly rather than per-commit in a real deployment |
 | Central package management (`Directory.Packages.props`) | Three projects already share seven packages. Versions drift silently otherwise; one file makes a mismatch a merge conflict instead of a runtime surprise |
 | Hacker News base URL in `appsettings.json` (`HackerNews:BaseUrl`) | The `v0` in `https://hacker-news.firebaseio.com/v0/` is a version pin. Held in configuration it is one visible, deliberate line a reviewer can find and a deployment can override; hard-coded it becomes an accident of a string literal repeated wherever a call is made. Trailing slash is load-bearing — `HttpClient.BaseAddress` drops the last segment without it |
+
+## Decisions taken during implementation
+
+Decisions made while building, where the reasoning is not evident from the code alone.
+
+| Decision | Rationale |
+|---|---|
+| `n` bound as text and parsed by hand, rather than as `int?` | Bound as `int?`, parameter binding answers a non-integer before the endpoint runs, with a different body from the endpoint's own 400 — in Development one carrying the exception type as its title and a stack trace in the payload, in Production a bare `Bad Request` with no `detail`. Taking `n` as text gives every invalid value — missing, `0`, `-1`, `abc`, or one too large to be an `int` — a single identical `ProblemDetails`, and puts the rule in one pure function that unit tests can reach. The cost is that the generated OpenAPI parameter is typed `string`, so an operation transformer restores `integer` with `minimum: 1` |
+| OpenAPI examples serialised from a real `StoryDto` | Generated from the schema alone, the API reference shows `"string"` placeholders and a `Z`-suffixed time — contradicting the ISO-8601-with-offset format the brief specifies and the endpoint returns. Running the brief's own example story through the same serialiser that writes responses means the documented sample cannot claim a format the API does not produce |
+

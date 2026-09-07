@@ -6,10 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BestStories.Api.IntegrationTests.TestSupport;
 
-/// <summary>
-/// The API booted in memory with <see cref="HackerNewsStub"/> in place of the real upstream.
-/// Nothing in the integration suite reaches the network.
-/// </summary>
+// The API booted in memory with the stub in place of the real upstream, so nothing in the
+// integration suite reaches the network.
 public sealed class ApiWithStubbedHackerNews : WebApplicationFactory<Program>
 {
     public HackerNewsStub Upstream { get; } = new();

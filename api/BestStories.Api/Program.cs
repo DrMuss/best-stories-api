@@ -1,10 +1,11 @@
+using BestStories.Api.Contracts;
 using BestStories.Api.Endpoints;
 using BestStories.Api.HackerNews;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(ApiDocumentation.Describe);
 builder.Services.AddHealthChecks();
 
 // The v0 in the base URL is a version pin on someone else's contract, so it lives in

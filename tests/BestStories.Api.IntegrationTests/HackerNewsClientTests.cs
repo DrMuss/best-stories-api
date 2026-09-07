@@ -20,8 +20,8 @@ public class HackerNewsClientTests
     }
 
     // The stub proves we parse what we think Hacker News sends. This proves what it actually
-    // sends still matches. Excluded from CI (--filter Category!=Network) so a bad day upstream
-    // does not fail the build.
+    // sends still matches. Categorised so a build can exclude it and stay green through a bad
+    // day upstream.
     [Fact]
     [Trait("Category", "Network")]
     public async Task HackerNewsClient_MatchesLiveContract()

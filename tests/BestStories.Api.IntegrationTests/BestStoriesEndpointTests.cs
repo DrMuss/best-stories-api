@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using BestStories.Api.Contracts;
 using BestStories.Api.IntegrationTests.TestSupport;
+using Microsoft.AspNetCore.Mvc;
 using Shouldly;
 
 namespace BestStories.Api.IntegrationTests;
@@ -14,7 +15,7 @@ public class BestStoriesEndpointTests
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream.RespondsWithBestStoryIds();
 
-        var response = await api.CreateClient().GetAsync("/stories");
+        var response = await api.CreateClient().GetAsync("/stories?n=10");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await response.Content.ReadAsStringAsync()).ShouldBe("[]");
@@ -81,15 +82,152 @@ public class BestStoriesEndpointTests
     }
 
     [Fact]
-    public async Task GetStories_FetchesOnlyTheRequestedNumberOfItems()
+    public async Task GetStories_FetchesEveryStoryToRankByScore()
     {
         using var api = new ApiWithStubbedHackerNews();
         api.Upstream
             .RespondsWithBestStoryIds(1, 2, 3)
-            .RespondsWithItem(1, """{"by":"a","descendants":0,"id":1,"score":9,"time":1570887781,"title":"One","type":"story","url":"https://example.com/1"}""");
+            .RespondsWithStory(1, score: 9)
+            .RespondsWithStory(2, score: 8)
+            .RespondsWithStory(3, score: 7);
 
         await api.CreateClient().GetFromJsonAsync<StoryDto[]>("/stories?n=1");
 
-        api.Upstream.RequestedPaths.ShouldBe(["beststories.json", "item/1.json"]);
+        api.Upstream.RequestedPaths.ShouldBe(
+            ["beststories.json", "item/1.json", "item/2.json", "item/3.json"],
+            ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task GetStories_ReturnsStoriesInDescendingScoreOrder()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream
+            .RespondsWithBestStoryIds(1, 2, 3, 4)
+            .RespondsWithStory(1, score: 84, title: "Third")
+            .RespondsWithStory(2, score: 1716, title: "First")
+            .RespondsWithStory(3, score: 12, title: "Fourth")
+            .RespondsWithStory(4, score: 417, title: "Second");
+
+        var stories = await api.CreateClient().GetFromJsonAsync<StoryDto[]>("/stories?n=4");
+
+        stories.ShouldNotBeNull();
+        stories.Select(story => story.Title).ShouldBe(["First", "Second", "Third", "Fourth"]);
+        stories.Select(story => story.Score).ShouldBe([1716, 417, 84, 12]);
+    }
+
+    [Fact]
+    public async Task GetStories_ReturnsTheHighestScoringStories_WhenNIsSmallerThanTheList()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream
+            .RespondsWithBestStoryIds(1, 2, 3)
+            .RespondsWithStory(1, score: 84, title: "Middle")
+            .RespondsWithStory(2, score: 1716, title: "Best")
+            .RespondsWithStory(3, score: 12, title: "Worst");
+
+        var stories = await api.CreateClient().GetFromJsonAsync<StoryDto[]>("/stories?n=2");
+
+        stories.ShouldNotBeNull();
+        stories.Select(story => story.Title).ShouldBe(["Best", "Middle"]);
+    }
+
+    [Fact]
+    public async Task GetStories_ReturnsWhatIsAvailable_WhenNExceedsTheStoriesUpstreamOffers()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream
+            .RespondsWithBestStoryIds(1, 2, 3)
+            .RespondsWithStory(1, score: 84)
+            .RespondsWithStory(2, score: 1716)
+            .RespondsWithStory(3, score: 12);
+
+        var response = await api.CreateClient().GetAsync("/stories?n=1000");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<StoryDto[]>())!.Length.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task GetStories_MatchesBriefExample()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream
+            .RespondsWithBestStoryIds(21233041)
+            .RespondsWithItem(21233041, """
+                {
+                  "by": "ismaildonmez",
+                  "descendants": 572,
+                  "id": 21233041,
+                  "score": 1716,
+                  "time": 1570887781,
+                  "title": "A uBlock Origin update was rejected from the Chrome Web Store",
+                  "type": "story",
+                  "url": "https://github.com/uBlockOrigin/uBlock-issues/issues/745"
+                }
+                """);
+
+        var response = await api.CreateClient().GetAsync("/stories?n=1");
+
+        (await response.Content.ReadAsStringAsync()).ShouldBe(
+            """
+            [{"title":"A uBlock Origin update was rejected from the Chrome Web Store","uri":"https://github.com/uBlockOrigin/uBlock-issues/issues/745","postedBy":"ismaildonmez","time":"2019-10-12T13:43:01+00:00","score":1716,"commentCount":572}]
+            """);
+    }
+
+    [Fact]
+    public async Task GetStories_OmitsUri_WhenAskHnPostHasNoUrl()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream
+            .RespondsWithBestStoryIds(21233041)
+            .RespondsWithItem(21233041, """
+                {"by":"pg","descendants":4,"id":21233041,"score":100,"time":1570887781,"title":"Ask HN: anything?","type":"story"}
+                """);
+
+        var response = await api.CreateClient().GetAsync("/stories?n=1");
+
+        (await response.Content.ReadAsStringAsync()).ShouldNotContain("uri");
+    }
+
+    [Theory]
+    [InlineData("/stories")]
+    [InlineData("/stories?n=0")]
+    [InlineData("/stories?n=-1")]
+    [InlineData("/stories?n=abc")]
+    public async Task GetStories_ReturnsProblemDetails_WhenNIsInvalid(string requestUri)
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream.RespondsWithBestStoryIds();
+
+        var response = await api.CreateClient().GetAsync(requestUri);
+
+        await ShouldBeTheInvalidStoryCountProblem(response);
+        api.Upstream.UpstreamCallCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GetStories_ReturnsProblemDetails_WhenNOverflowsInt()
+    {
+        using var api = new ApiWithStubbedHackerNews();
+        api.Upstream.RespondsWithBestStoryIds();
+
+        var response = await api.CreateClient().GetAsync("/stories?n=99999999999999999999");
+
+        await ShouldBeTheInvalidStoryCountProblem(response);
+    }
+
+    // Every way of getting n wrong answers identically, so the assertion is shared.
+    private static async Task ShouldBeTheInvalidStoryCountProblem(HttpResponseMessage response)
+    {
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
+
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        problem.ShouldNotBeNull();
+        problem.Status.ShouldBe(400);
+        problem.Title.ShouldBe("Invalid story count");
+        problem.Detail.ShouldBe("n is required and must be a positive integer.");
     }
 }

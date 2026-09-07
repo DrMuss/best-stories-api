@@ -3,12 +3,9 @@ using System.Text.Json;
 
 namespace BestStories.Api.IntegrationTests.TestSupport;
 
-/// <summary>
-/// Stands in for the Hacker News API. Programs one canned JSON body per upstream path and
-/// records every path asked for, so a test can assert both the response and the upstream cost
-/// of producing it. Unprogrammed paths return 404 rather than an empty body, so a test that
-/// forgets to set one up fails loudly instead of silently.
-/// </summary>
+// Stands in for the Hacker News API, recording every path asked for so a test can assert the
+// upstream cost of a response as well as its content. An unprogrammed path answers 404 rather
+// than an empty body, so a test that forgets to set one up fails loudly.
 public sealed class HackerNewsStub : HttpMessageHandler
 {
     private readonly Dictionary<string, string> jsonByPath = new(StringComparer.OrdinalIgnoreCase);
@@ -39,6 +36,18 @@ public sealed class HackerNewsStub : HttpMessageHandler
         jsonByPath[$"item/{storyId}.json"] = itemJson;
         return this;
     }
+
+    public HackerNewsStub RespondsWithStory(
+        int storyId,
+        int score,
+        string title = "A story",
+        string by = "author",
+        long time = 1570887781,
+        int descendants = 0,
+        string url = "https://example.com") =>
+        RespondsWithItem(storyId, $$"""
+            {"by":"{{by}}","descendants":{{descendants}},"id":{{storyId}},"score":{{score}},"time":{{time}},"title":"{{title}}","type":"story","url":"{{url}}"}
+            """);
 
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
