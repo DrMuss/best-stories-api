@@ -1,3 +1,4 @@
+using BestStories.Api.Endpoints;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,8 +20,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapHealthChecks("/health");
+app.MapEndpoints();
 
 app.Run();
-
-// Exposes the implicit Program class of top-level statements to WebApplicationFactory<Program>.
 public partial class Program { }
