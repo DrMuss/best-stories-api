@@ -17,9 +17,7 @@ public class HackerNewsOptionsTests
         using var api = new ApiWithStubbedHackerNews(
             new Dictionary<string, string?> { ["HackerNews:RefreshInterval"] = refreshInterval });
 
-        var failure = Should.Throw<OptionsValidationException>(() => api.CreateClient());
-
-        failure.Message.ShouldContain("RefreshInterval");
+        ShouldRefuseToStart(api, complainingAbout: "RefreshInterval");
     }
 
     [Fact]
@@ -28,8 +26,22 @@ public class HackerNewsOptionsTests
         using var api = new ApiWithStubbedHackerNews(
             new Dictionary<string, string?> { ["HackerNews:BaseUrl"] = "" });
 
-        var failure = Should.Throw<OptionsValidationException>(() => api.CreateClient());
+        ShouldRefuseToStart(api, complainingAbout: "BaseUrl");
+    }
 
-        failure.Message.ShouldContain("BaseUrl");
+    // Startup surfaces the same validation failure more than once — the options are validated on
+    // start and resolved again while the resilience pipeline is built — so the host aggregates.
+    // What matters is that it refuses to start and says which setting is wrong.
+    private static void ShouldRefuseToStart(ApiWithStubbedHackerNews api, string complainingAbout)
+    {
+        var failure = Should.Throw<Exception>(() => api.CreateClient());
+
+        var validation = failure as OptionsValidationException
+            ?? (failure as AggregateException)?.Flatten().InnerExceptions
+                .OfType<OptionsValidationException>()
+                .FirstOrDefault();
+
+        validation.ShouldNotBeNull();
+        validation.Message.ShouldContain(complainingAbout);
     }
 }

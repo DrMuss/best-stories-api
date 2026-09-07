@@ -16,10 +16,20 @@ public sealed class ApiWithStubbedHackerNews(Dictionary<string, string?>? settin
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        if (settings is not null)
+        // Production backoff would have the suite waiting seconds per retry; the behaviour under
+        // test is that a retry happens, not how long it politely waits first.
+        var configured = new Dictionary<string, string?>
         {
-            builder.ConfigureAppConfiguration(configuration => configuration.AddInMemoryCollection(settings));
+            ["HackerNews:RetryDelay"] = "00:00:00.010",
+            ["HackerNews:UpstreamAttemptTimeout"] = "00:00:01"
+        };
+
+        foreach (var setting in settings ?? [])
+        {
+            configured[setting.Key] = setting.Value;
         }
+
+        builder.ConfigureAppConfiguration(configuration => configuration.AddInMemoryCollection(configured));
 
         builder.ConfigureTestServices(services =>
             services.AddHttpClient<HackerNewsClient>(

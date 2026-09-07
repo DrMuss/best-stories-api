@@ -1,6 +1,7 @@
 using BestStories.Api.Contracts;
 using BestStories.Api.HackerNews;
 using BestStories.Api.Stories;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -62,6 +63,24 @@ public class StoryRefreshServiceTests
         (await refresher.CyclesStartedStayAt(1)).ShouldBeTrue();
     }
 
+    [Fact]
+    public async Task RefreshLoop_KeepsCycling_AfterACycleThrows()
+    {
+        var (service, refresher, clock, snapshot) = ARefreshService();
+        await service.StartAsync(CancellationToken.None);
+
+        refresher.MakeTheNextCycleThrow();
+        await AdvanceUntilTheNextCycleStarts(clock, refresher);
+
+        // The failed cycle published nothing, and the loop is still running.
+        snapshot.Current.Single().Title.ShouldBe("Cycle 1");
+
+        await AdvanceUntilTheNextCycleCompletes(clock, refresher);
+        snapshot.Current.Single().Title.ShouldBe("Cycle 3");
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
     // The loop arms the timer again only after a cycle returns, so a single Advance can land in
     // the gap and be lost. Advancing until the loop responds is what "an interval elapsed"
     // means when the clock is not real.
@@ -102,7 +121,8 @@ public class StoryRefreshServiceTests
             RefreshInterval = RefreshInterval
         });
 
-        return (new StoryRefreshService(refresher, clock, options), refresher, clock, snapshot);
+        return (new StoryRefreshService(refresher, clock, options, NullLogger<StoryRefreshService>.Instance),
+            refresher, clock, snapshot);
     }
 
     // Publishes a snapshot naming the cycle that produced it, so a test can tell one refresh
@@ -111,6 +131,7 @@ public class StoryRefreshServiceTests
     {
         private static readonly TimeSpan LongEnoughToBeSure = TimeSpan.FromMilliseconds(250);
         private TaskCompletionSource? hang;
+        private int throwOnNextCycle;
         private int cyclesStarted;
         private int cyclesCompleted;
 
@@ -119,6 +140,8 @@ public class StoryRefreshServiceTests
         public int CyclesCompleted => Volatile.Read(ref cyclesCompleted);
 
         public void MakeCyclesHang() => Volatile.Write(ref hang, new TaskCompletionSource());
+
+        public void MakeTheNextCycleThrow() => Volatile.Write(ref throwOnNextCycle, 1);
 
         public void LetHangingCyclesFinish()
         {
@@ -149,6 +172,11 @@ public class StoryRefreshServiceTests
         public async Task RefreshAsync(CancellationToken cancellationToken)
         {
             var cycle = Interlocked.Increment(ref cyclesStarted);
+
+            if (Interlocked.Exchange(ref throwOnNextCycle, 0) == 1)
+            {
+                throw new HttpRequestException("Upstream is unwell.");
+            }
 
             if (Volatile.Read(ref hang) is { } hanging)
             {

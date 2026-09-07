@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 
@@ -14,6 +15,10 @@ public sealed class HackerNewsStub : HttpMessageHandler
     private readonly List<string> requestedPaths = [];
     private readonly Lock requestedPathsLock = new();
     private TaskCompletionSource? held;
+    private readonly Dictionary<string, HttpStatusCode> statusByPath = new(StringComparer.OrdinalIgnoreCase);
+    private HttpStatusCode? itemFailureStatus;
+    private TimeSpan itemDelay;
+    private int itemFailuresRemaining;
     private int requestsInFlight;
     private int peakConcurrentRequests;
 
@@ -31,6 +36,42 @@ public sealed class HackerNewsStub : HttpMessageHandler
     public int UpstreamCallCount => RequestedPaths.Count;
 
     public int PeakConcurrentRequests => Volatile.Read(ref peakConcurrentRequests);
+
+    public HackerNewsStub FailsItemWith(int storyId, HttpStatusCode status)
+    {
+        statusByPath[$"item/{storyId}.json"] = status;
+        return this;
+    }
+
+    public HackerNewsStub FailsEveryItemRequestWith(HttpStatusCode status)
+    {
+        itemFailureStatus = status;
+        Volatile.Write(ref itemFailuresRemaining, int.MaxValue);
+        return this;
+    }
+
+    public HackerNewsStub FailsTheNextItemRequestsWith(int count, HttpStatusCode status)
+    {
+        itemFailureStatus = status;
+        Volatile.Write(ref itemFailuresRemaining, count);
+        return this;
+    }
+
+    public HackerNewsStub DelaysItemResponsesBy(TimeSpan delay)
+    {
+        itemDelay = delay;
+        return this;
+    }
+
+    public HackerNewsStub Recovers()
+    {
+        Volatile.Write(ref itemFailuresRemaining, 0);
+        statusByPath.Clear();
+        itemDelay = TimeSpan.Zero;
+        return this;
+    }
+
+    public int RequestsFor(string path) => RequestedPaths.Count(requested => requested == path);
 
     // Held requests stay open until released, so a test can see how many the caller is willing
     // to have in flight at once.
@@ -98,19 +139,37 @@ public sealed class HackerNewsStub : HttpMessageHandler
 
         try
         {
-            // Only item requests, so the list of ids that decides what to fetch still arrives.
-            if (path.StartsWith("item/", StringComparison.Ordinal)
-                && Volatile.Read(ref held) is { } holding)
+            // Only item requests are disrupted, so the list of ids that decides what to fetch
+            // still arrives and the refresh gets as far as the items.
+            if (path.StartsWith("item/", StringComparison.Ordinal))
             {
-                await holding.Task.WaitAsync(cancellationToken);
+                if (Volatile.Read(ref held) is { } holding)
+                {
+                    await holding.Task.WaitAsync(cancellationToken);
+                }
+
+                if (itemDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(itemDelay, cancellationToken);
+                }
+
+                if (statusByPath.TryGetValue(path, out var pathStatus))
+                {
+                    return new HttpResponseMessage(pathStatus);
+                }
+
+                if (TakeAFailure() is { } status)
+                {
+                    return new HttpResponseMessage(status);
+                }
             }
 
             if (!jsonByPath.TryGetValue(path, out var json))
             {
-                return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
             }
 
-            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
@@ -118,6 +177,29 @@ public sealed class HackerNewsStub : HttpMessageHandler
         finally
         {
             Interlocked.Decrement(ref requestsInFlight);
+        }
+    }
+
+    private HttpStatusCode? TakeAFailure()
+    {
+        while (true)
+        {
+            var remaining = Volatile.Read(ref itemFailuresRemaining);
+
+            if (remaining == 0)
+            {
+                return null;
+            }
+
+            if (remaining == int.MaxValue)
+            {
+                return itemFailureStatus;
+            }
+
+            if (Interlocked.CompareExchange(ref itemFailuresRemaining, remaining - 1, remaining) == remaining)
+            {
+                return itemFailureStatus;
+            }
         }
     }
 

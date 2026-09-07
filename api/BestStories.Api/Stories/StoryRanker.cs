@@ -7,10 +7,11 @@ public static class StoryRanker
 {
     public static IReadOnlyList<StoryDto> RankBestFirst(IEnumerable<HackerNewsItem?> items) =>
         items
-            // Nulls are ids upstream no longer has. The type filter is defensive: nothing
-            // documents beststories.json as carrying only stories.
+            // Nulls are ids upstream no longer has; deleted and dead are ones it has withdrawn.
+            // The type filter is defensive: nothing documents beststories.json as carrying only
+            // stories.
             .OfType<HackerNewsItem>()
-            .Where(item => item.Type == "story")
+            .Where(item => item is { Type: "story", Deleted: false, Dead: false })
             // The ordering of beststories.json is undocumented, so score order is established
             // here rather than trusted. Ties break on id so that the same set of items always
             // serialises identically.

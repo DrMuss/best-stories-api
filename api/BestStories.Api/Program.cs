@@ -3,6 +3,7 @@ using BestStories.Api.Endpoints;
 using BestStories.Api.HackerNews;
 using BestStories.Api.OpenApi;
 using BestStories.Api.Stories;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
@@ -24,7 +25,21 @@ builder.Services.AddOptions<HackerNewsOptions>()
     .ValidateOnStart();
 
 builder.Services.AddHttpClient<HackerNewsClient>((services, httpClient) =>
-    httpClient.BaseAddress = new Uri(services.GetRequiredService<IOptions<HackerNewsOptions>>().Value.BaseUrl));
+        httpClient.BaseAddress = new Uri(services.GetRequiredService<IOptions<HackerNewsOptions>>().Value.BaseUrl))
+    // Retry with backoff and jitter, a circuit breaker, and timeouts, ordered correctly. Retry
+    // is the one resilience pattern that can cause the outage it prevents: three retries across
+    // a whole refresh, against an upstream already struggling, is us adding to the load. The
+    // breaker and the fan-out cap are what make it safe.
+    .AddStandardResilienceHandler()
+    .Configure((resilience, services) =>
+    {
+        var hackerNews = services.GetRequiredService<IOptions<HackerNewsOptions>>().Value;
+
+        resilience.AttemptTimeout.Timeout = hackerNews.UpstreamAttemptTimeout;
+        resilience.Retry.Delay = hackerNews.RetryDelay;
+        resilience.TotalRequestTimeout.Timeout = hackerNews.UpstreamAttemptTimeout * 4;
+        resilience.CircuitBreaker.SamplingDuration = hackerNews.UpstreamAttemptTimeout * 2;
+    });
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IStorySnapshot, StorySnapshot>();
