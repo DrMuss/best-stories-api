@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/Schemas/stryker-config.json",
+  "stryker-config": {
+    "project": "BestStories.Api.csproj",
+    "test-projects": [
+      "tests/BestStories.Api.UnitTests/BestStories.Api.UnitTests.csproj",
+      "tests/BestStories.Api.IntegrationTests/BestStories.Api.IntegrationTests.csproj"
+    ],
+    "reporters": [
+      "html",
+      "progress"
+    ],
+    "thresholds": {
+      "high": 90,
+      "low": 80,
+      "break": 70
+    },
+    "mutate": [
+      "!**/Program.cs"
+    ]
+  }
+}

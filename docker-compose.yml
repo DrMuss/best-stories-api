@@ -1,0 +1,12 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: beststories-api:latest
+    ports:
+      - "8080:8080"
+    environment:
+      # Development exposes the OpenAPI document, which is Development-gated in Program.cs.
+      ASPNETCORE_ENVIRONMENT: Development
+    restart: unless-stopped
