@@ -21,6 +21,7 @@ public class ColdStartTests
 
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
         problem!.Title.ShouldBe("Stories are not available yet");
+        problem.Detail.ShouldBe("The service is still building its first snapshot of the best stories.");
     }
 
     [Fact]

@@ -12,6 +12,14 @@ public class HackerNewsOptionsValidatorTests
         Validate(Configured()).Succeeded.ShouldBeTrue();
     }
 
+    [Fact]
+    public void Options_WithNothingConfigured_FailOnTheBaseUrl()
+    {
+        // Every other setting has a usable default; the base URL deliberately does not, so a
+        // section that was never configured is a startup failure rather than a silent default.
+        ShouldFailMentioning(new HackerNewsOptions(), "BaseUrl");
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -29,6 +37,39 @@ public class HackerNewsOptionsValidatorTests
     {
         ShouldFailMentioning(
             Configured(refreshInterval: TimeSpan.FromSeconds(seconds)), "RefreshInterval");
+    }
+
+    [Fact]
+    public void RefreshInterval_OfExactlyOneSecond_IsAllowed()
+    {
+        Validate(Configured(refreshInterval: TimeSpan.FromSeconds(1))).Succeeded.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void RefreshInterval_OfExactlyOneDay_IsRejected()
+    {
+        ShouldFailMentioning(Configured(refreshInterval: TimeSpan.FromDays(1)), "RefreshInterval");
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(100)]
+    public void MaxConcurrentItemFetches_AllowsBothEndsOfItsRange(int cap)
+    {
+        Validate(Configured(maxConcurrentItemFetches: cap)).Succeeded.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IdleTimeout_OfZero_IsRejected()
+    {
+        ShouldFailMentioning(Configured(idleTimeout: TimeSpan.Zero), "IdleTimeout");
+    }
+
+    [Fact]
+    public void RetryDelay_OfZero_IsAllowed()
+    {
+        // No wait before a retry is aggressive but coherent; only a negative delay is nonsense.
+        Validate(Configured(retryDelay: TimeSpan.Zero)).Succeeded.ShouldBeTrue();
     }
 
     [Fact]
@@ -89,13 +130,15 @@ public class HackerNewsOptionsValidatorTests
         TimeSpan? refreshInterval = null,
         int maxConcurrentItemFetches = 10,
         TimeSpan? upstreamAttemptTimeout = null,
-        TimeSpan? retryDelay = null) =>
+        TimeSpan? retryDelay = null,
+        TimeSpan? idleTimeout = null) =>
         new()
         {
             BaseUrl = baseUrl,
             RefreshInterval = refreshInterval ?? TimeSpan.FromMinutes(1),
             MaxConcurrentItemFetches = maxConcurrentItemFetches,
             UpstreamAttemptTimeout = upstreamAttemptTimeout ?? TimeSpan.FromSeconds(10),
-            RetryDelay = retryDelay ?? TimeSpan.FromSeconds(2)
+            RetryDelay = retryDelay ?? TimeSpan.FromSeconds(2),
+            IdleTimeout = idleTimeout ?? TimeSpan.FromMinutes(10)
         };
 }

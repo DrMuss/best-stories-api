@@ -57,6 +57,24 @@ public class ApiReferenceTests
         n.GetProperty("required").GetBoolean().ShouldBeTrue();
         n.GetProperty("schema").GetProperty("type").GetString().ShouldBe("integer");
         n.GetProperty("schema").GetProperty("minimum").GetInt32().ShouldBe(1);
+        n.GetProperty("schema").GetProperty("format").GetString().ShouldBe("int32");
+    }
+
+    [Fact]
+    public async Task OpenApiDocument_NamesAndDescribesTheOperation()
+    {
+        var client = await new ApiWithStubbedHackerNews().CreateReadyClientAsync();
+
+        var document = await client.GetFromJsonAsync<JsonDocument>("/openapi/v1.json");
+
+        var operation = document!.RootElement
+            .GetProperty("paths")
+            .GetProperty("/stories")
+            .GetProperty("get");
+
+        operation.GetProperty("operationId").GetString().ShouldBe("GetBestStories");
+        operation.GetProperty("summary").GetString()
+            .ShouldBe("Returns the best n stories in descending order of score.");
     }
 
     // The API reference builds its sample response from this example. Generated from the schema
@@ -75,6 +93,13 @@ public class ApiReferenceTests
             .GetProperty("StoryDto")
             .GetProperty("example");
 
+        example.GetProperty("title").GetString()
+            .ShouldBe("A uBlock Origin update was rejected from the Chrome Web Store");
+        example.GetProperty("uri").GetString()
+            .ShouldBe("https://github.com/uBlockOrigin/uBlock-issues/issues/745");
+        example.GetProperty("postedBy").GetString().ShouldBe("ismaildonmez");
         example.GetProperty("time").GetString().ShouldBe("2019-10-12T13:43:01+00:00");
+        example.GetProperty("score").GetInt32().ShouldBe(1716);
+        example.GetProperty("commentCount").GetInt32().ShouldBe(572);
     }
 }

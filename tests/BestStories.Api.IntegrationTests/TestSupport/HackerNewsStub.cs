@@ -106,6 +106,12 @@ public sealed class HackerNewsStub : HttpMessageHandler
         return this;
     }
 
+    public HackerNewsStub RespondsWith(string path, string json)
+    {
+        jsonByPath[path] = json;
+        return this;
+    }
+
     public HackerNewsStub RespondsWithItem(int storyId, string itemJson)
     {
         jsonByPath[$"item/{storyId}.json"] = itemJson;
