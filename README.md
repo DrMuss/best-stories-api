@@ -6,6 +6,21 @@ An ASP.NET Core service returning the best _n_ Hacker News stories by score.
 
 Design decisions, and the dependencies deliberately not taken, are recorded in [DESIGN.md](DESIGN.md).
 
+## How it works
+
+A background loop fetches the best-stories list and every item behind it, ranks them by score,
+and publishes the result as an immutable snapshot. Requests read that snapshot and never call
+Hacker News, so a thousand concurrent callers cost the same upstream traffic as none. The
+snapshot is replaced by reference rather than mutated, so a reader never sees a half-built list
+and the read path needs no lock. A refresh that fails is discarded whole and the previous
+snapshot stands, so upstream trouble degrades freshness rather than availability. Cycles are
+skipped while nobody is asking, so upstream load is proportional to use rather than to elapsed
+time.
+
+Organised as folders within a single API project rather than a Domain/Application/Infrastructure
+split. On a multi-feature API I use feature folders, each with its own DTOs, validators and
+handlers. With one endpoint, that structure adds navigation cost without adding separation.
+
 ## Running it
 
 ```bash
@@ -78,6 +93,26 @@ whatever comes back and hard-codes no number anywhere. An `n` larger than the li
 clamped to what exists and answered `200 OK`, not rejected: the list length is a ceiling
 upstream sets, not a mistake the caller made.
 
+**The list happens to arrive in score order, and the code sorts anyway.** Across all 200 items
+sampled the scores were monotonically decreasing, from 1270 down to 9 — so trusting the order
+would have worked on the day. Hacker News does not document it, so the snapshot is sorted by
+score explicitly, with ties broken by id so the same set of stories always serialises
+identically. Ties are not rare: 98 of the 200 shared a score with another story.
+
+That costs effectively nothing, because it is not on the request path. Ranking happens once per
+refresh, and ranking all 200 items — filtering, sorting with the tie-break, and mapping to the
+response shape — takes a median of **20 µs** on the dev machine, 51 µs for 500 items. Against a
+60-second refresh interval that is twenty microseconds in sixty million: around 0.00003% of the
+cycle. Not trusting an undocumented ordering is free.
+
+**Other findings from the same sample**, each of which the mapping handles: `url` was absent on
+8 of 200 items, which is the Ask HN case; `descendants` was present on all 200, so the
+absent-or-null case is handled defensively rather than because it was observed; every item was
+`type: "story"`, so the filter for jobs and polls is also defensive; and no title carried HTML
+entities, so titles are passed through unmodified. An id Hacker News no longer has returns
+`200` with a body of `null` rather than a `404` — verified, and the reason a null item is
+skipped rather than treated as a failed fetch.
+
 ## Cold start
 
 The service starts serving immediately and builds its first snapshot in the background. Until
@@ -122,6 +157,36 @@ docker run --rm --cpus 2 -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:10.
   bash -c 'dotnet test --configuration Release --filter "Category!=Network"'
 ```
 
+### What is tested where
+
+**Unit tests** cover the pure functions, where a wrong answer is a wrong answer regardless of
+plumbing: ranking and the tie-break, the item mapping, the `n` parsing rules, the snapshot's
+publish semantics, the options validator, and the refresh loop driven by a fake clock.
+
+**Integration tests** run the whole service in memory through `WebApplicationFactory`, with
+Hacker News replaced by a hand-written `HttpMessageHandler` — about a hundred lines that
+programs a response per URL, counts calls, records peak concurrency, and can hold responses
+open or fail them on demand. That last part is what makes the interesting tests possible:
+
+- `ServingRequests_DoesNotCallHackerNews` — a warm snapshot, a hundred concurrent requests, and
+  an assertion that the upstream call count did not move. This is the brief's central
+  requirement written as an assertion rather than an intention.
+- `Refresh_LimitsConcurrentUpstreamCalls` — holds every item response open and asserts the peak
+  in flight equals the configured cap.
+- The failure taxonomy: an item that keeps failing discards the whole cycle; a `null`, deleted
+  or dead item is skipped and the cycle still publishes; malformed JSON and a too-slow upstream
+  discard the cycle; and the endpoint keeps serving the last good snapshot throughout.
+- The cold edge: `503` with `Retry-After` before the first snapshot, readiness not-ready over
+  the same window, liveness healthy throughout.
+
+**One test hits the real API.** `HackerNewsClient_MatchesLiveContract` is tagged
+`[Trait("Category", "Network")]` and excluded from CI, so the field mapping is checked against
+reality without a bad day upstream turning the build red.
+
+**Mutation testing** rather than coverage alone: coverage proves a line ran, mutation proves a
+test would have failed if the line were wrong. In a real deployment this would run nightly
+rather than per commit.
+
 ## Coverage, complexity and mutation testing
 
 Tools are pinned in `.config/dotnet-tools.json`:
@@ -137,3 +202,80 @@ dotnet stryker
 ```
 
 The coverage report's Risk Hotspots page carries cyclomatic complexity and CRAP scores.
+
+### Coverage and complexity
+
+Run on the current commit, excluding the network-tagged test as CI does:
+
+| | |
+|---|---|
+| Line coverage, hand-written classes | **100%** (all 17) |
+| Line coverage, whole assembly | 50.7% |
+| Highest cyclomatic complexity | 20, `HackerNewsOptionsValidator.Validate` |
+| Methods above complexity 5 | 3 of 50 |
+| Highest CRAP score | 20 |
+
+Two of those numbers need their context. The assembly-wide 50.7% is not a gap in the tests:
+every class in the project reports 100%, and the aggregate is dragged down by two generated
+types the coverage tool counts and nothing calls — the OpenAPI source generator's output, which
+exists because XML documentation is enabled, and compiler-generated helpers.
+
+And every CRAP score here equals its method's cyclomatic complexity, because CRAP is
+`complexity² × (1 − coverage)³ + complexity` — with full coverage the first term is zero and the
+metric collapses to complexity. So CRAP earns its keep as a hotspot finder only where coverage
+is partial; here it is complexity with extra steps, and the number worth watching is the 20 on
+the options validator.
+
+That 20 is deliberately left alone. Cyclomatic complexity counts branches without regard to
+their shape, and this method is a flat run of independent `if` checks — one per setting, no
+nesting, no interaction between them — which reads as a list of rules rather than as a
+tangle. Splitting it into a validator per setting would lower the number and raise the cost of
+finding out what is validated. It is worth revisiting if the rules ever start depending on each
+other, since that is when the number would start describing something real.
+
+### Mutation score
+
+**83.0%** — 93 of 110 mutants killed, run locally on the current commit.
+
+The first run scored 68.8%, below this repo's own break threshold, and the survivors were worth
+reading rather than explaining away. They pointed at untested boundaries: nothing exercised a
+`RefreshInterval` of exactly one second or exactly one day, or a concurrency cap of exactly 1 or
+100, so a mutant flipping `<` to `<=` in the validator went unnoticed. Nothing covered Hacker
+News answering the *list* endpoint with `null` rather than an array, which would have been a
+null-reference at runtime. And several strings that callers actually see went unasserted — the
+503's `detail`, the operation id and summary in the OpenAPI document, the `int32` format on `n`,
+and the empty `BaseUrl` default that is what makes an unconfigured section fail at startup.
+
+The 17 that survive are deliberate. Most are the *wording* of validation messages: the tests
+assert that a failure names the setting that is wrong, not how the sentence reads, because
+asserting the exact text against the same source it came from proves nothing and breaks whenever
+the wording improves. The rest are log messages and the two health-check descriptions, which
+never leave the process, plus one boundary in the idle check that would need a test landing the
+fake clock exactly on the timeout.
+
+## Given more time
+
+Ordered by what I think each is worth, not by effort.
+
+1. **Survive a restart during an upstream outage.** The snapshot lives only in memory, so a
+   process restart while Hacker News is unavailable leaves the service with nothing to serve
+   and no way to rebuild. Writing each good snapshot to disk and loading it at startup would
+   turn the worst case from "returns 503 until upstream returns" into "serves stale stories".
+   This is the largest real gap in the design.
+2. **Telemetry on the refresh path.** Cycle duration, failures, and the age of the current
+   snapshot as metrics, so staleness is observable rather than inferred. Right now a failing
+   refresh is a log line, and the only external signal is that scores stop moving.
+3. **Delta refresh via `updates.json`.** Poll the changed-item feed and re-fetch only the
+   intersection with the current best list, with a periodic full reconciliation for
+   correctness. Worth doing only with a measured overlap rate behind it — the feed is a
+   firehose across all of Hacker News, so the saving is an empirical question, not a
+   given.
+4. **An `X-Available-Count` response header.** The brief fixes the body as an array, so a
+   caller cannot currently tell "exactly the 200 you asked for" from "clamped to the 200 that
+   exist". A header answers that without touching the contract.
+5. **Inbound rate limiting.** Once the snapshot is warm, inbound load never reaches Hacker
+   News, so this protects our own CPU rather than upstream — a different requirement from the
+   one set, and the reason it is not built.
+6. **Scale-out.** Each instance keeps its own snapshot and its own refresh loop, so ten
+   instances make ten times the upstream calls. A shared cache, or one refresher publishing for
+   many readers, is the next design conversation rather than a code change.
